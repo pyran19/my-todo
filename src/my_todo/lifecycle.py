@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .db import now_iso, parse_iso
 
@@ -20,6 +20,39 @@ PROMOTE_THRESHOLDS_DAYS = {
     "mid": 7,
     "long": 30,
 }
+
+# 各段階の「入口」に相当する経過日数 (= その段階の下限しきい値)。
+# 手動移動 (promote/demote) 時に created_at をこの日数ぶん過去へずらすことで、
+# 自動移行ロジックと矛盾しない形で段階を移す (design.md 4.3)。
+STAGE_ENTRY_DAYS = {
+    "short": 0,
+    "mid": PROMOTE_THRESHOLDS_DAYS["mid"],
+    "long": PROMOTE_THRESHOLDS_DAYS["long"],
+}
+
+
+def created_at_for_stage(stage: str, now: datetime | None = None) -> str:
+    """指定段階の入口に相当する created_at (ISO8601 文字列) を返す。
+
+    `now - 段階の下限日数` を created_at とすることで、
+    その段階に「入ったばかり」の状態を再現する。target_stage() がちょうど
+    その段階を返すため、直後の自動移行で昇格も降格もされない。
+    """
+    if now is None:
+        now = datetime.now(timezone.utc)
+    return (now - timedelta(days=STAGE_ENTRY_DAYS[stage])).isoformat()
+
+
+def next_stage(stage: str) -> str | None:
+    """一つ長いライフサイクル段階を返す。最長 (long) なら None。"""
+    i = STAGES.index(stage)
+    return STAGES[i + 1] if i + 1 < len(STAGES) else None
+
+
+def prev_stage(stage: str) -> str | None:
+    """一つ短いライフサイクル段階を返す。最短 (short) なら None。"""
+    i = STAGES.index(stage)
+    return STAGES[i - 1] if i > 0 else None
 
 
 def target_stage(created_at: str, now: datetime | None = None) -> str:

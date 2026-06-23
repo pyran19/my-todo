@@ -37,13 +37,13 @@ CREATE TABLE IF NOT EXISTS tasks (
     status      TEXT    NOT NULL DEFAULT 'open',   -- 'open'  | 'done'
     created_at  TEXT    NOT NULL,                  -- ISO8601 (UTC)
     updated_at  TEXT    NOT NULL,                  -- ISO8601 (UTC)
-    promoted_at TEXT                               -- 最後に lifecycle 昇格した日時 (nullable)
+    promoted_at TEXT                               -- 最後に lifecycle 移動した日時 (nullable)
 );
 ```
 
 - `lifecycle`: 短期=`short` / 中期=`mid` / 長期=`long`。
 - `status`: `open`（未完了） / `done`（完了）。
-- 日付はすべてアプリ側で自動設定（F-2）。ユーザーは入力しない。
+- 日付はすべてアプリ側で自動設定（F-2）。ユーザーは入力しない。ただし手動移動（4.3）では `created_at` を意図的に書き換える。
 
 ### 3.2 `think` テーブル（F-4）
 
@@ -91,6 +91,19 @@ CREATE TABLE IF NOT EXISTS think (
 
 これにより、ユーザーが何もしなくても古いタスクが中期→長期へ移り、一覧から「おおまかな寿命」が把握できる。
 
+### 4.3 手動移動（`promote` / `demote`）
+
+自動移行とは別に、ユーザーが任意のタスクを明示的に1段階ずつ移動できる。
+
+- `promote`: 一つ長寿命側へ（`short`→`mid`→`long`）。`long` で頭打ち。
+- `demote`: 一つ短寿命側へ（`long`→`mid`→`short`）。`short` で頭打ち。
+
+移動は **`created_at` を「移動先段階の入口」に書き換える**方式で行う。具体的には `lifecycle` を移動先段階に更新すると同時に、`created_at` を `now - 移動先段階の下限日数`（`short`=0日 / `mid`=7日 / `long`=30日）へ書き換える。
+
+- 経過日数を正確に保つことは本アプリの目的ではない（おおまかな寿命把握のみ）ため、`created_at` の書き換えを許容する。
+- この方式なら専用フラグを持たずに自動移行（4.2）と整合する。移動直後は `target_stage()` がちょうど移動先段階を返すため、即座に再昇格・降格されない。特に `demote` が次回実行の自動昇格で巻き戻ることもない。
+- 一方で「その段階に入ったばかり」の状態になるため、さらに時間が経てば自動移行は通常どおり進む（移動でロックはされない）。
+
 ## 5. CLIコマンド体系（Typer）
 
 エントリポイントは `todo`。各コマンド実行時に第4節の昇格チェックを自動実行する。
@@ -98,7 +111,9 @@ CREATE TABLE IF NOT EXISTS think (
 | コマンド | 説明 |
 |----------|------|
 | `todo add "<本文>"` | 短期タスクとして追加。`created_at` を自動記録。本文を省略した場合は `$EDITOR` を開いて入力 |
-| `todo ls` | open タスクを **lifecycle 段階ごとにグループ化**して一覧表示。`--all` で done も含める |
+| `todo ls` | タスクを **lifecycle 段階ごとにグループ化**して一覧表示。既定では `short` 段階のみ。`--stage/-s <段階>` で表示段階を指定（複数指定可、`all` で全段階）。`--all` で done も含める |
+| `todo promote <id>` | タスクを一つ長寿命側の段階へ手動移動（`short`→`mid`→`long`）。`created_at` を移動先段階の入口へ書き換える |
+| `todo demote <id>` | タスクを一つ短寿命側の段階へ手動移動（`long`→`mid`→`short`）。`created_at` を移動先段階の入口へ書き換える |
 | `todo edit <id>` | 該当タスクの本文を `$EDITOR`（vim）で開いて編集。保存時に `updated_at` 更新 |
 | `todo done <id>` | タスクを完了（`status = 'done'`）にする |
 | `todo rm <id>` | タスクを削除する |
@@ -116,6 +131,8 @@ CREATE TABLE IF NOT EXISTS think (
 ### 5.2 一覧表示の整形（F-6）
 
 `todo ls` は `short` / `mid` / `long` の見出しごとにタスクをまとめて表示する。各行に `id`・本文・（任意で）作成からの経過日数を示し、寿命がひと目で分かるようにする。
+
+既定では `short` 段階のみ表示し、`--stage/-s` で表示対象段階を選べる（例: `-s mid`、`-s mid -s long`、`-s all`）。短期タスクに集中しやすくしつつ、長寿命側は必要なときに明示的に確認する運用を想定。
 
 ## 6. 設定ファイル（任意・将来）
 

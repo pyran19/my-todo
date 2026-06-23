@@ -14,7 +14,9 @@
 
 ## タスクCRUD
 - [x] `todo add` … 短期タスク追加（`created_at`/`updated_at` 自動設定、本文省略時は `$EDITOR`）
-- [x] `todo ls` … open タスクを lifecycle 段階ごとにグループ表示（`--all` で done 含む）
+- [x] `todo ls` … タスクを lifecycle 段階ごとにグループ表示（既定は short のみ、`--stage/-s` で段階指定・`all` で全段階、`--all` で done 含む）
+- [x] `todo promote <id>` … 一つ長寿命側へ手動移動（`created_at` を移動先段階の入口へ書き換え）
+- [x] `todo demote <id>` … 一つ短寿命側へ手動移動（同上）
 - [x] `todo edit <id>` … `$EDITOR` で本文編集、`updated_at` 更新
 - [x] `todo done <id>` … `status = 'done'` へ
 - [x] `todo rm <id>` … 削除
@@ -28,6 +30,7 @@
 - [x] 1回のチェックで複数段階の昇格にも対応
 - [x] 昇格時に `lifecycle` / `promoted_at` / `updated_at` を更新
 - [x] 各コマンド実行時にこのチェックを自動フック（lazy migration）
+- [x] 手動移動（`promote`/`demote`）は `created_at` を移動先段階の入口へ書き換え、自動移行と整合させる
 
 ## to think リスト
 - [x] `todo think add` / `ls` / `edit` / `rm` を実装（`think` テーブル操作）
