@@ -12,7 +12,13 @@ import typer
 
 from . import db
 from .editor import edit_text
-from .lifecycle import STAGES, next_stage, prev_stage, run_promotions
+from .lifecycle import (
+    STAGES,
+    created_at_for_stage,
+    next_stage,
+    prev_stage,
+    run_promotions,
+)
 
 app = typer.Typer(
     help="個人用TODO CLI。自分の欲しい機能だけを備えた最小TODO。",
@@ -129,9 +135,8 @@ def _render_ls(stages: list[str], show_all: bool) -> None:
         typer.echo(f"## {stage}")
         for row in items:
             mark = " ✓" if row["status"] == "done" else ""
-            lock = " 🔒" if row["lifecycle_locked"] else ""
             typer.echo(
-                f"{row['id']:>4}  [{_elapsed_days(row['created_at'])}d]{mark}{lock} "
+                f"{row['id']:>4}  [{_elapsed_days(row['created_at'])}d]{mark} "
                 f"{_first_line(row['body'])}"
             )
 
@@ -157,7 +162,9 @@ def _move_stage(id: int, direction: int) -> None:
     """タスクの lifecycle 段階を手動で1段階移動する。
 
     direction > 0 で長寿命側 (short→mid→long)、< 0 で短寿命側へ。
-    手動移動したタスクは lifecycle_locked=1 とし、以降の自動移行対象から外す。
+    移動は created_at を「移動先段階の入口」に書き換えて行う。これにより
+    自動移行ロジックと矛盾せず (直後に昇格も降格もされない)、降格しても
+    次回実行で巻き戻らない。経過日数表示は移動先段階相当に変わる。
     """
     conn = db.connect()
     try:
@@ -177,9 +184,9 @@ def _move_stage(id: int, direction: int) -> None:
 
         ts = db.now_iso()
         conn.execute(
-            "UPDATE tasks SET lifecycle = ?, lifecycle_locked = 1, "
+            "UPDATE tasks SET lifecycle = ?, created_at = ?, "
             "promoted_at = ?, updated_at = ? WHERE id = ?",
-            (dest, ts, ts, id),
+            (dest, created_at_for_stage(dest), ts, ts, id),
         )
         conn.commit()
         typer.echo(f"moved #{id}: {current} -> {dest}")

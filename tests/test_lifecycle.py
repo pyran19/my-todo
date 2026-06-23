@@ -8,6 +8,7 @@ import pytest
 
 from my_todo import db
 from my_todo.lifecycle import (
+    created_at_for_stage,
     next_stage,
     prev_stage,
     run_promotions,
@@ -87,10 +88,8 @@ def test_next_and_prev_stage():
     assert prev_stage("short") is None
 
 
-def test_locked_task_is_not_promoted(conn):
-    tid = _insert(conn, _ago(100))
-    conn.execute("UPDATE tasks SET lifecycle_locked = 1 WHERE id = ?", (tid,))
-    conn.commit()
-    assert run_promotions(conn) == 0
-    row = conn.execute("SELECT lifecycle FROM tasks WHERE id = ?", (tid,)).fetchone()
-    assert row["lifecycle"] == "short"
+@pytest.mark.parametrize("stage", ["short", "mid", "long"])
+def test_created_at_for_stage_lands_in_that_stage(stage):
+    # 生成した created_at をそのまま target_stage に通すと、その段階を返す
+    # (= 移動直後に自動移行で昇格も降格もされない)。
+    assert target_stage(created_at_for_stage(stage)) == stage

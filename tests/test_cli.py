@@ -41,49 +41,60 @@ def _lifecycle(tid):
     conn = db.connect()
     try:
         row = conn.execute(
-            "SELECT lifecycle, lifecycle_locked FROM tasks WHERE id = ?", (tid,)
+            "SELECT lifecycle FROM tasks WHERE id = ?", (tid,)
         ).fetchone()
-        return row["lifecycle"], row["lifecycle_locked"]
+        return row["lifecycle"]
     finally:
         conn.close()
 
 
-def test_promote_moves_one_stage_up_and_locks():
+def test_promote_moves_one_stage_up():
     tid = _insert(_ago(0))
     result = runner.invoke(app, ["promote", str(tid)])
     assert result.exit_code == 0
-    assert _lifecycle(tid) == ("mid", 1)
+    assert _lifecycle(tid) == "mid"
 
 
 def test_demote_moves_one_stage_down():
     tid = _insert(_ago(0), lifecycle="long")
     result = runner.invoke(app, ["demote", str(tid)])
     assert result.exit_code == 0
-    assert _lifecycle(tid) == ("mid", 1)
+    assert _lifecycle(tid) == "mid"
 
 
 def test_promote_at_top_stage_errors():
     tid = _insert(_ago(0), lifecycle="long")
     result = runner.invoke(app, ["promote", str(tid)])
     assert result.exit_code == 1
-    assert _lifecycle(tid)[0] == "long"
+    assert _lifecycle(tid) == "long"
 
 
 def test_demote_at_bottom_stage_errors():
     tid = _insert(_ago(0), lifecycle="short")
     result = runner.invoke(app, ["demote", str(tid)])
     assert result.exit_code == 1
-    assert _lifecycle(tid)[0] == "short"
+    assert _lifecycle(tid) == "short"
 
 
 def test_demote_survives_auto_promotion():
-    # 45日経過 (本来 long) のタスクを mid へ手動 demote しても
-    # 次回コマンドの自動移行で long へ戻されない。
+    # 45日経過 (本来 long) のタスクを mid へ手動 demote すると created_at が
+    # mid 相当へ書き換わり、次回コマンドの自動移行で long へ戻らない。
     tid = _insert(_ago(45), lifecycle="long")
     runner.invoke(app, ["demote", str(tid)])
-    assert _lifecycle(tid)[0] == "mid"
+    assert _lifecycle(tid) == "mid"
     runner.invoke(app, ["ls"])  # 自動移行フックが走る
-    assert _lifecycle(tid)[0] == "mid"
+    assert _lifecycle(tid) == "mid"
+
+
+def test_promote_then_aging_continues():
+    # 手動 promote 後も「その段階に入ったばかり」の created_at になるだけで、
+    # さらに時間が経てば自動移行は通常どおり進む (ロックされない)。
+    tid = _insert(_ago(0), lifecycle="short")
+    runner.invoke(app, ["promote", str(tid)])  # short -> mid (created_at: 7日前)
+    assert _lifecycle(tid) == "mid"
+    # mid の入口(7日)に置かれるので、long(30日)へは即時昇格しない。
+    runner.invoke(app, ["ls"])
+    assert _lifecycle(tid) == "mid"
 
 
 def test_missing_task_errors():

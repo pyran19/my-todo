@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .db import now_iso, parse_iso
 
@@ -20,6 +20,27 @@ PROMOTE_THRESHOLDS_DAYS = {
     "mid": 7,
     "long": 30,
 }
+
+# 各段階の「入口」に相当する経過日数 (= その段階の下限しきい値)。
+# 手動移動 (promote/demote) 時に created_at をこの日数ぶん過去へずらすことで、
+# 自動移行ロジックと矛盾しない形で段階を移す (design.md 4.3)。
+STAGE_ENTRY_DAYS = {
+    "short": 0,
+    "mid": PROMOTE_THRESHOLDS_DAYS["mid"],
+    "long": PROMOTE_THRESHOLDS_DAYS["long"],
+}
+
+
+def created_at_for_stage(stage: str, now: datetime | None = None) -> str:
+    """指定段階の入口に相当する created_at (ISO8601 文字列) を返す。
+
+    `now - 段階の下限日数` を created_at とすることで、
+    その段階に「入ったばかり」の状態を再現する。target_stage() がちょうど
+    その段階を返すため、直後の自動移行で昇格も降格もされない。
+    """
+    if now is None:
+        now = datetime.now(timezone.utc)
+    return (now - timedelta(days=STAGE_ENTRY_DAYS[stage])).isoformat()
 
 
 def next_stage(stage: str) -> str | None:
@@ -56,16 +77,13 @@ def run_promotions(conn: sqlite3.Connection, now: datetime | None = None) -> int
     """open タスクの lifecycle を遅延昇格させる。昇格した件数を返す。
 
     status='open' のタスクのみ対象 (done は寿命を凍結)。
-    手動で段階を移動したタスク (lifecycle_locked=1) も対象外とし、
-    自動移行が手動操作を上書きしないようにする。
     昇格時に lifecycle / promoted_at / updated_at を更新する。
     """
     if now is None:
         now = datetime.now(timezone.utc)
 
     rows = conn.execute(
-        "SELECT id, lifecycle, created_at FROM tasks "
-        "WHERE status = 'open' AND lifecycle_locked = 0"
+        "SELECT id, lifecycle, created_at FROM tasks WHERE status = 'open'"
     ).fetchall()
 
     promoted = 0
