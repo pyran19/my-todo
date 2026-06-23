@@ -22,6 +22,18 @@ PROMOTE_THRESHOLDS_DAYS = {
 }
 
 
+def next_stage(stage: str) -> str | None:
+    """一つ長いライフサイクル段階を返す。最長 (long) なら None。"""
+    i = STAGES.index(stage)
+    return STAGES[i + 1] if i + 1 < len(STAGES) else None
+
+
+def prev_stage(stage: str) -> str | None:
+    """一つ短いライフサイクル段階を返す。最短 (short) なら None。"""
+    i = STAGES.index(stage)
+    return STAGES[i - 1] if i > 0 else None
+
+
 def target_stage(created_at: str, now: datetime | None = None) -> str:
     """created_at からの経過日数に応じて到達すべき lifecycle 段階を返す。
 
@@ -44,13 +56,16 @@ def run_promotions(conn: sqlite3.Connection, now: datetime | None = None) -> int
     """open タスクの lifecycle を遅延昇格させる。昇格した件数を返す。
 
     status='open' のタスクのみ対象 (done は寿命を凍結)。
+    手動で段階を移動したタスク (lifecycle_locked=1) も対象外とし、
+    自動移行が手動操作を上書きしないようにする。
     昇格時に lifecycle / promoted_at / updated_at を更新する。
     """
     if now is None:
         now = datetime.now(timezone.utc)
 
     rows = conn.execute(
-        "SELECT id, lifecycle, created_at FROM tasks WHERE status = 'open'"
+        "SELECT id, lifecycle, created_at FROM tasks "
+        "WHERE status = 'open' AND lifecycle_locked = 0"
     ).fetchall()
 
     promoted = 0

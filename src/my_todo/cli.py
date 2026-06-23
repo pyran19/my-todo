@@ -12,7 +12,7 @@ import typer
 
 from . import db
 from .editor import edit_text
-from .lifecycle import STAGES, run_promotions
+from .lifecycle import STAGES, next_stage, prev_stage, run_promotions
 
 app = typer.Typer(
     help="個人用TODO CLI。自分の欲しい機能だけを備えた最小TODO。",
@@ -53,7 +53,7 @@ def main(ctx: typer.Context) -> None:
         conn.close()
 
     if ctx.invoked_subcommand is None:
-        ls(show_all=False)
+        _render_ls(["short"], show_all=False)
 
 
 @app.command()
@@ -79,19 +79,29 @@ def add(
         conn.close()
 
 
-@app.command()
-def ls(
-    show_all: bool = typer.Option(
-        False, "--all", "-a", help="done タスクも含めて表示する。"
-    ),
-) -> None:
-    """open タスクを lifecycle 段階ごとにグループ化して一覧表示する。"""
+def _resolve_stages(stage: list[str] | None) -> list[str]:
+    """--stage オプションを表示対象段階のリストへ正規化する。
+
+    無指定なら short のみ。"all" 指定で全段階。STAGES の順序を保つ。
+    """
+    if not stage:
+        return ["short"]
+    if "all" in stage:
+        return list(STAGES)
+    invalid = [s for s in stage if s not in STAGES]
+    if invalid:
+        valid = ", ".join((*STAGES, "all"))
+        typer.echo(f"不明な段階: {', '.join(invalid)} (有効: {valid})")
+        raise typer.Exit(code=1)
+    return [s for s in STAGES if s in stage]
+
+
+def _render_ls(stages: list[str], show_all: bool) -> None:
+    """指定段階のタスクを lifecycle 段階ごとにグループ化して一覧表示する。"""
     conn = db.connect()
     try:
         if show_all:
-            rows = conn.execute(
-                "SELECT * FROM tasks ORDER BY created_at"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM tasks ORDER BY created_at").fetchall()
         else:
             rows = conn.execute(
                 "SELECT * FROM tasks WHERE status = 'open' ORDER BY created_at"
@@ -99,16 +109,17 @@ def ls(
     finally:
         conn.close()
 
-    if not rows:
+    by_stage: dict[str, list] = {s: [] for s in stages}
+    for row in rows:
+        if row["lifecycle"] in by_stage:
+            by_stage[row["lifecycle"]].append(row)
+
+    if not any(by_stage.values()):
         typer.echo("(タスクはありません)")
         return
 
-    by_stage: dict[str, list] = {s: [] for s in STAGES}
-    for row in rows:
-        by_stage[row["lifecycle"]].append(row)
-
     first = True
-    for stage in STAGES:
+    for stage in stages:
         items = by_stage[stage]
         if not items:
             continue  # 空グループは見出しごと非表示。
@@ -118,10 +129,74 @@ def ls(
         typer.echo(f"## {stage}")
         for row in items:
             mark = " ✓" if row["status"] == "done" else ""
+            lock = " 🔒" if row["lifecycle_locked"] else ""
             typer.echo(
-                f"{row['id']:>4}  [{_elapsed_days(row['created_at'])}d]{mark} "
+                f"{row['id']:>4}  [{_elapsed_days(row['created_at'])}d]{mark}{lock} "
                 f"{_first_line(row['body'])}"
             )
+
+
+@app.command()
+def ls(
+    stage: list[str] = typer.Option(
+        None,
+        "--stage",
+        "-s",
+        help="表示する段階 (short/mid/long, 複数指定可。all で全段階)。"
+        "無指定なら short のみ。",
+    ),
+    show_all: bool = typer.Option(
+        False, "--all", "-a", help="done タスクも含めて表示する。"
+    ),
+) -> None:
+    """タスクを lifecycle 段階ごとにグループ化して一覧表示する (既定では short のみ)。"""
+    _render_ls(_resolve_stages(stage), show_all)
+
+
+def _move_stage(id: int, direction: int) -> None:
+    """タスクの lifecycle 段階を手動で1段階移動する。
+
+    direction > 0 で長寿命側 (short→mid→long)、< 0 で短寿命側へ。
+    手動移動したタスクは lifecycle_locked=1 とし、以降の自動移行対象から外す。
+    """
+    conn = db.connect()
+    try:
+        row = conn.execute(
+            "SELECT lifecycle FROM tasks WHERE id = ?", (id,)
+        ).fetchone()
+        if row is None:
+            typer.echo(f"task #{id} が見つかりません。")
+            raise typer.Exit(code=1)
+
+        current = row["lifecycle"]
+        dest = next_stage(current) if direction > 0 else prev_stage(current)
+        if dest is None:
+            edge = "long (最長)" if direction > 0 else "short (最短)"
+            typer.echo(f"task #{id} は既に {edge} 段階のため移動できません。")
+            raise typer.Exit(code=1)
+
+        ts = db.now_iso()
+        conn.execute(
+            "UPDATE tasks SET lifecycle = ?, lifecycle_locked = 1, "
+            "promoted_at = ?, updated_at = ? WHERE id = ?",
+            (dest, ts, ts, id),
+        )
+        conn.commit()
+        typer.echo(f"moved #{id}: {current} -> {dest}")
+    finally:
+        conn.close()
+
+
+@app.command()
+def promote(id: int = typer.Argument(..., help="移動するタスクID。")) -> None:
+    """タスクを一つ長いライフサイクル段階へ移動する (short→mid→long)。"""
+    _move_stage(id, direction=1)
+
+
+@app.command()
+def demote(id: int = typer.Argument(..., help="移動するタスクID。")) -> None:
+    """タスクを一つ短いライフサイクル段階へ移動する (long→mid→short)。"""
+    _move_stage(id, direction=-1)
 
 
 @app.command()

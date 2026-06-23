@@ -7,7 +7,12 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from my_todo import db
-from my_todo.lifecycle import run_promotions, target_stage
+from my_todo.lifecycle import (
+    next_stage,
+    prev_stage,
+    run_promotions,
+    target_stage,
+)
 
 
 def _ago(days: int) -> str:
@@ -71,3 +76,21 @@ def test_no_double_promotion_is_idempotent(conn):
 def test_fresh_task_not_promoted(conn):
     _insert(conn, _ago(1))
     assert run_promotions(conn) == 0
+
+
+def test_next_and_prev_stage():
+    assert next_stage("short") == "mid"
+    assert next_stage("mid") == "long"
+    assert next_stage("long") is None
+    assert prev_stage("long") == "mid"
+    assert prev_stage("mid") == "short"
+    assert prev_stage("short") is None
+
+
+def test_locked_task_is_not_promoted(conn):
+    tid = _insert(conn, _ago(100))
+    conn.execute("UPDATE tasks SET lifecycle_locked = 1 WHERE id = ?", (tid,))
+    conn.commit()
+    assert run_promotions(conn) == 0
+    row = conn.execute("SELECT lifecycle FROM tasks WHERE id = ?", (tid,)).fetchone()
+    assert row["lifecycle"] == "short"

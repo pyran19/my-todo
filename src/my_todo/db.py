@@ -43,13 +43,14 @@ def db_path() -> Path:
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    body        TEXT    NOT NULL,
-    lifecycle   TEXT    NOT NULL DEFAULT 'short',
-    status      TEXT    NOT NULL DEFAULT 'open',
-    created_at  TEXT    NOT NULL,
-    updated_at  TEXT    NOT NULL,
-    promoted_at TEXT
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    body            TEXT    NOT NULL,
+    lifecycle       TEXT    NOT NULL DEFAULT 'short',
+    status          TEXT    NOT NULL DEFAULT 'open',
+    created_at      TEXT    NOT NULL,
+    updated_at      TEXT    NOT NULL,
+    promoted_at     TEXT,
+    lifecycle_locked INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS think (
@@ -61,6 +62,20 @@ CREATE TABLE IF NOT EXISTS think (
 """
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """既存DB向けの軽量マイグレーション。新カラムを冪等に追加する。
+
+    `CREATE TABLE IF NOT EXISTS` は既存テーブルに新カラムを足さないため、
+    ここで PRAGMA を見て不足分を ALTER TABLE する。
+    """
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)")}
+    if "lifecycle_locked" not in cols:
+        conn.execute(
+            "ALTER TABLE tasks ADD COLUMN lifecycle_locked INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.commit()
+
+
 def connect() -> sqlite3.Connection:
     """DBへ接続する。ディレクトリ・DB・スキーマを冪等に初期化する。"""
     path = db_path()
@@ -68,4 +83,5 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
