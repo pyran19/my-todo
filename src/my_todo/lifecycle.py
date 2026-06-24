@@ -15,10 +15,10 @@ from .db import now_iso, parse_iso
 STAGES = ("short", "mid", "long")
 
 # 各段階へ「昇格する」ために必要な、created_at からの経過日数しきい値。
-# short→mid: 約7日 / mid→long: 約30日 (design.md 4.1)。
+# short→mid: 約3日 / mid→long: 約14日 (design.md 4.1)。
 PROMOTE_THRESHOLDS_DAYS = {
-    "mid": 7,
-    "long": 30,
+    "mid": 3,
+    "long": 14,
 }
 
 # 各段階の「入口」に相当する経過日数 (= その段階の下限しきい値)。
