@@ -4,7 +4,7 @@
 > これは my-todo を作り始めたときの「構想」をそのまま残した開発用文書です。
 > 何を作りたかったのか・なぜ作るのかという **経緯（why）の記録** を目的としており、
 > 現在の実装・仕様を正確に反映することは目指していません。
-> 現在の仕様は [`../specification.md`](../specification.md) / [`../design.md`](../design.md) を、
+> 現在の仕様は [`specification.md`](./specification.md) / [`design.md`](./design.md) を、
 > 利用者向けの説明は [`../../README.md`](../../README.md) を参照してください。
 >
 > （元々 `README.md` に書かれていた初期構想を、初見者向け README へ書き直す際にこちらへ移したものです。）
