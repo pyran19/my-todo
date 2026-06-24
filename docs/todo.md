@@ -26,7 +26,7 @@
 - [x] `os.environ.get("EDITOR", "vim")` をサブプロセス起動 → 終了後に読み戻して保存
 
 ## ライフサイクル自動移行
-- [x] 昇格ロジック: `open` かつ `created_at` 経過日数がしきい値超のものを昇格（short→mid: 約7日 / mid→long: 約30日）
+- [x] 昇格ロジック: `open` かつ `created_at` 経過日数がしきい値超のものを昇格（short→mid: 約3日 / mid→long: 約14日）
 - [x] 1回のチェックで複数段階の昇格にも対応
 - [x] 昇格時に `lifecycle` / `promoted_at` / `updated_at` を更新
 - [x] 各コマンド実行時にこのチェックを自動フック（lazy migration）
