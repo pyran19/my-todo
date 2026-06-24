@@ -42,7 +42,7 @@ todo
 
 開発者向けの文書:
 
-- [仕様書](./docs/specification.md) / [設計書](./docs/design.md) / [開発TODO](./docs/todo.md)
+- [仕様書](./docs/dev/specification.md) / [設計書](./docs/dev/design.md) / [開発TODO](./docs/dev/todo.md)
 - [開発初期の構想メモ](./docs/dev/concept.md) — 作り始めたときの構想（経緯の記録）
 
 ## ライセンス
