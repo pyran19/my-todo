@@ -158,6 +158,30 @@ def ls(
     _render_ls(_resolve_stages(stage), show_all)
 
 
+def _make_stage_command(stage_name: str):
+    """`todo <stage>` で当該段階のみを一覧表示する薄いコマンドを生成する。
+
+    `todo ls -s <stage>` の短縮形。`-a/--all` は ls と揃える。
+    """
+
+    def _cmd(
+        show_all: bool = typer.Option(
+            False, "--all", "-a", help="done タスクも含めて表示する。"
+        ),
+    ) -> None:
+        _render_ls([stage_name], show_all)
+
+    _cmd.__doc__ = (
+        f"{stage_name} 段階のタスクを一覧表示する (todo ls -s {stage_name} の短縮)。"
+    )
+    return _cmd
+
+
+# `todo short` / `todo mid` / `todo long` を ls の段階指定の短縮形として登録する。
+for _stage in STAGES:
+    app.command(name=_stage)(_make_stage_command(_stage))
+
+
 def _move_stage(id: int, direction: int) -> None:
     """タスクの lifecycle 段階を手動で1段階移動する。
 

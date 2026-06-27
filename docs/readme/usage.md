@@ -13,6 +13,7 @@
 | `todo ls` | タスクを寿命の段階ごとにまとめて一覧表示（既定は `short` 段階のみ） |
 | `todo ls -s <段階>` | 表示する段階を指定（`short`/`mid`/`long`、複数指定可、`all` で全段階） |
 | `todo ls -a` | 完了（done）タスクも含めて表示 |
+| `todo short` / `todo mid` / `todo long` | 該当段階だけを一覧表示（`todo ls -s <段階>` の短縮形。`-a` で done も表示） |
 | `todo edit <id>` | タスク本文を `$EDITOR` で開いて編集 |
 | `todo done <id>` | タスクを完了にする |
 | `todo rm <id>` | タスクを削除する（確認なし） |
@@ -44,6 +45,10 @@ todo
 
 # 中期・長期も含めて確認
 todo ls -s all
+
+# 中期・長期テーブルだけを手早く見る（todo ls -s mid / long の短縮）
+todo mid
+todo long
 
 # 編集・完了・削除
 todo edit 3
