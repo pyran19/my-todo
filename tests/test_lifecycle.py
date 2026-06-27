@@ -40,7 +40,7 @@ def _insert(conn, created_at, lifecycle="short", status="open"):
 
 @pytest.mark.parametrize(
     "days,expected",
-    [(0, "short"), (6, "short"), (7, "mid"), (29, "mid"), (30, "long"), (100, "long")],
+    [(0, "short"), (2, "short"), (3, "mid"), (13, "mid"), (14, "long"), (100, "long")],
 )
 def test_target_stage_thresholds(days, expected):
     assert target_stage(_ago(days)) == expected

@@ -136,3 +136,29 @@ def test_ls_stage_all_shows_every_table():
 def test_ls_invalid_stage_errors():
     result = runner.invoke(app, ["ls", "-s", "bogus"])
     assert result.exit_code == 1
+
+
+def test_stage_shortcut_shows_only_that_stage():
+    _insert(_ago(0), lifecycle="short")
+    _insert(_ago(0), lifecycle="mid")
+    _insert(_ago(0), lifecycle="long")
+    result = runner.invoke(app, ["mid"])
+    assert result.exit_code == 0
+    assert "## mid" in result.stdout
+    assert "## short" not in result.stdout
+    assert "## long" not in result.stdout
+
+
+def test_stage_shortcut_long():
+    _insert(_ago(0), lifecycle="long")
+    result = runner.invoke(app, ["long"])
+    assert result.exit_code == 0
+    assert "## long" in result.stdout
+
+
+def test_stage_shortcut_all_flag_includes_done():
+    _insert(_ago(0), lifecycle="mid", status="done")
+    without_all = runner.invoke(app, ["mid"])
+    assert "## mid" not in without_all.stdout
+    with_all = runner.invoke(app, ["mid", "-a"])
+    assert "## mid" in with_all.stdout
